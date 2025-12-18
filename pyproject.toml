@@ -1,0 +1,115 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ortex"
+version = "1.0.2"
+description = "Official Python SDK for ORTEX Financial Data API"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.9"
+authors = [
+    { name = "ORTEX Technologies LTD", email = "support@ortex.com" }
+]
+keywords = [
+    "ortex",
+    "finance",
+    "stock",
+    "short-interest",
+    "trading",
+    "api",
+    "financial-data",
+    "market-data",
+    "options",
+    "fundamentals"
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Financial and Insurance Industry",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Office/Business :: Financial :: Investment",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Typing :: Typed"
+]
+dependencies = [
+    "requests>=2.31.0",
+    "pandas>=2.0.0",
+    "tenacity>=8.2.0"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+    "pytest-mock>=3.12.0",
+    "responses>=0.24.0",
+    "mypy>=1.8.0",
+    "ruff>=0.1.0",
+    "black>=24.0.0",
+    "pre-commit>=3.6.0",
+    "types-requests>=2.31.0",
+    "pandas-stubs>=2.0.0"
+]
+
+[project.urls]
+Homepage = "https://ortex.com"
+Documentation = "https://docs.ortex.com"
+Repository = "https://github.com/ortex-financial/ortex-python-sdk"
+"API Keys" = "https://app.ortex.com/apis"
+Support = "https://public.ortex.com/support/"
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/src",
+    "/README.md",
+    "/LICENSE"
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ortex"]
+
+[tool.ruff]
+target-version = "py39"
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # Pyflakes
+    "I",      # isort
+    "B",      # flake8-bugbear
+    "C4",     # flake8-comprehensions
+    "UP",     # pyupgrade
+    "D",      # pydocstyle
+]
+ignore = [
+    "D100",   # Missing docstring in public module
+    "D104",   # Missing docstring in public package
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.mypy]
+python_version = "3.9"
+strict = true
+warn_return_any = true
+warn_unused_ignores = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --cov=ortex --cov-report=term-missing"
+
+[tool.black]
+line-length = 100
+target-version = ["py39"]
