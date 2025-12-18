@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ortex"
-version = "1.0.2"
+version = "1.0.3"
 description = "Official Python SDK for ORTEX Financial Data API"
 readme = "README.md"
 license = "MIT"

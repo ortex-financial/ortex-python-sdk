@@ -16,7 +16,7 @@ Full documentation: https://docs.ortex.com
 
 from __future__ import annotations
 
-__version__ = "1.0.2"
+__version__ = "1.0.3"
 __author__ = "ORTEX Technologies LTD"
 
 from .api import (
@@ -49,6 +49,7 @@ from .api import (
 )
 from .client import OrtexClient
 from .exceptions import (
+    APIError,
     AuthenticationError,
     NetworkError,
     NotFoundError,
@@ -100,7 +101,8 @@ __all__ = [
     "get_exchanges",
     "get_macro_events",
     # Exceptions
-    "OrtexError",
+    "APIError",
+    "OrtexError",  # Backwards compatibility alias for APIError
     "AuthenticationError",
     "RateLimitError",
     "NotFoundError",

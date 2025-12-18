@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 
-class OrtexError(Exception):
+class APIError(Exception):
     """Base exception for all ORTEX SDK errors."""
 
     def __init__(self, message: str, status_code: int | None = None) -> None:
-        """Initialize OrtexError.
+        """Initialize APIError.
 
         Args:
             message: Error message describing what went wrong.
@@ -24,7 +24,11 @@ class OrtexError(Exception):
         return self.message
 
 
-class AuthenticationError(OrtexError):
+# Backwards compatibility alias
+OrtexError = APIError
+
+
+class AuthenticationError(APIError):
     """Raised when API key is missing or invalid."""
 
     def __init__(self, message: str = "Invalid or missing API key") -> None:
@@ -36,7 +40,7 @@ class AuthenticationError(OrtexError):
         super().__init__(message, status_code=401)
 
 
-class RateLimitError(OrtexError):
+class RateLimitError(APIError):
     """Raised when API rate limit is exceeded."""
 
     def __init__(
@@ -54,7 +58,7 @@ class RateLimitError(OrtexError):
         self.retry_after = retry_after
 
 
-class NotFoundError(OrtexError):
+class NotFoundError(APIError):
     """Raised when requested resource is not found."""
 
     def __init__(self, message: str = "Resource not found") -> None:
@@ -66,7 +70,7 @@ class NotFoundError(OrtexError):
         super().__init__(message, status_code=404)
 
 
-class ValidationError(OrtexError):
+class ValidationError(APIError):
     """Raised when request parameters are invalid."""
 
     def __init__(self, message: str = "Invalid request parameters") -> None:
@@ -78,7 +82,7 @@ class ValidationError(OrtexError):
         super().__init__(message, status_code=400)
 
 
-class ServerError(OrtexError):
+class ServerError(APIError):
     """Raised when ORTEX server encounters an error."""
 
     def __init__(self, message: str = "Server error") -> None:
@@ -90,7 +94,7 @@ class ServerError(OrtexError):
         super().__init__(message, status_code=500)
 
 
-class TimeoutError(OrtexError):
+class TimeoutError(APIError):
     """Raised when request times out."""
 
     def __init__(self, message: str = "Request timed out") -> None:
@@ -102,7 +106,7 @@ class TimeoutError(OrtexError):
         super().__init__(message)
 
 
-class NetworkError(OrtexError):
+class NetworkError(APIError):
     """Raised when network connection fails."""
 
     def __init__(self, message: str = "Network connection error") -> None:

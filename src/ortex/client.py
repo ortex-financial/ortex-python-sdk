@@ -22,10 +22,10 @@ from tenacity import (
 )
 
 from .exceptions import (
+    APIError,
     AuthenticationError,
     NetworkError,
     NotFoundError,
-    OrtexError,
     RateLimitError,
     ServerError,
     TimeoutError,
@@ -98,7 +98,7 @@ class OrtexClient:
                 "Ortex-Api-Key": self.api_key,
                 "Content-Type": "application/json",
                 "Accept": "application/json",
-                "User-Agent": "ortex-python-sdk/1.0.2",
+                "User-Agent": "ortex-python-sdk/1.0.3",
             }
         )
 
@@ -158,7 +158,7 @@ class OrtexClient:
         elif 500 <= status < 600:
             raise ServerError(message)
         else:
-            raise OrtexError(message, status_code=response.status_code)
+            raise APIError(message, status_code=response.status_code)
 
     def get(
         self,
@@ -223,7 +223,7 @@ class OrtexClient:
             exc = e.last_attempt.exception()
             if exc is not None:
                 raise exc from e
-            raise OrtexError("Request failed after retries") from e
+            raise APIError("Request failed after retries") from e
 
     def fetch(
         self,

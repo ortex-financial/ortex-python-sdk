@@ -269,7 +269,7 @@ The SDK provides specific exception types:
 ```python
 import ortex
 from ortex import (
-    OrtexError,
+    APIError,
     AuthenticationError,
     RateLimitError,
     NotFoundError,
@@ -289,7 +289,7 @@ except ValidationError as e:
     print(f"Invalid parameters: {e}")
 except ServerError:
     print("ORTEX server error")
-except OrtexError as e:
+except APIError as e:
     print(f"API error: {e}")
 ```
 
@@ -332,4 +332,4 @@ MIT License - ORTEX Technologies LTD
 
 ## Version
 
-1.0.2
+1.0.3

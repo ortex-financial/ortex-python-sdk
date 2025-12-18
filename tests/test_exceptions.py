@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from ortex.exceptions import (
+    APIError,
     AuthenticationError,
     NetworkError,
     NotFoundError,
@@ -16,22 +17,28 @@ from ortex.exceptions import (
 )
 
 
-class TestOrtexError:
-    """Tests for base OrtexError class."""
+class TestAPIError:
+    """Tests for base APIError class."""
 
     def test_init_with_message(self) -> None:
-        """Test OrtexError with message only."""
-        error = OrtexError("Something went wrong")
+        """Test APIError with message only."""
+        error = APIError("Something went wrong")
         assert str(error) == "Something went wrong"
         assert error.message == "Something went wrong"
         assert error.status_code is None
 
     def test_init_with_status_code(self) -> None:
-        """Test OrtexError with message and status code."""
-        error = OrtexError("Bad request", status_code=400)
+        """Test APIError with message and status code."""
+        error = APIError("Bad request", status_code=400)
         assert str(error) == "[400] Bad request"
         assert error.message == "Bad request"
         assert error.status_code == 400
+
+    def test_ortex_error_alias(self) -> None:
+        """Test OrtexError is alias for APIError."""
+        assert OrtexError is APIError
+        error = OrtexError("test")
+        assert isinstance(error, APIError)
 
 
 class TestAuthenticationError:
@@ -127,8 +134,8 @@ class TestNetworkError:
 class TestExceptionHierarchy:
     """Tests for exception inheritance hierarchy."""
 
-    def test_all_inherit_from_ortex_error(self) -> None:
-        """Test all exceptions inherit from OrtexError."""
+    def test_all_inherit_from_api_error(self) -> None:
+        """Test all exceptions inherit from APIError."""
         exceptions = [
             AuthenticationError(),
             RateLimitError(),
@@ -139,12 +146,12 @@ class TestExceptionHierarchy:
             NetworkError(),
         ]
         for exc in exceptions:
-            assert isinstance(exc, OrtexError)
+            assert isinstance(exc, APIError)
 
     def test_all_inherit_from_exception(self) -> None:
         """Test all exceptions inherit from Exception."""
         exceptions = [
-            OrtexError("test"),
+            APIError("test"),
             AuthenticationError(),
             RateLimitError(),
             NotFoundError(),
@@ -156,13 +163,13 @@ class TestExceptionHierarchy:
         for exc in exceptions:
             assert isinstance(exc, Exception)
 
-    def test_can_catch_as_ortex_error(self) -> None:
-        """Test all exceptions can be caught as OrtexError."""
-        with pytest.raises(OrtexError):
+    def test_can_catch_as_api_error(self) -> None:
+        """Test all exceptions can be caught as APIError."""
+        with pytest.raises(APIError):
             raise AuthenticationError()
 
-        with pytest.raises(OrtexError):
+        with pytest.raises(APIError):
             raise RateLimitError()
 
-        with pytest.raises(OrtexError):
+        with pytest.raises(APIError):
             raise NotFoundError()
