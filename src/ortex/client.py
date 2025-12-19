@@ -31,6 +31,7 @@ from .exceptions import (
     TimeoutError,
     ValidationError,
 )
+from .throttler import RequestThrottler
 
 logger = logging.getLogger("ortex")
 
@@ -40,13 +41,21 @@ class OrtexClient:
 
     This client handles all HTTP communication with the ORTEX API, including:
     - Authentication via API key
-    - Automatic retry with exponential backoff on rate limits
+    - Automatic retry with exponential backoff on rate limits and timeouts
     - Request timeout handling
     - Response parsing and error handling
+    - Local request throttling to prevent overwhelming the API
 
     Example:
         >>> client = OrtexClient(api_key="your-api-key")
         >>> data = client.get("NYSE/F/short_interest")
+
+        >>> # With throttling for concurrent usage
+        >>> client = OrtexClient(
+        ...     api_key="your-api-key",
+        ...     max_concurrent_requests=10,
+        ...     requests_per_second=5.0,
+        ... )
     """
 
     BASE_URL = "https://api.ortex.com/api/v1/"
@@ -54,12 +63,16 @@ class OrtexClient:
     MAX_RETRIES = 5
     MIN_RETRY_WAIT = 1
     MAX_RETRY_WAIT = 60
+    DEFAULT_MAX_CONCURRENT = 2
+    DEFAULT_REQUESTS_PER_SECOND: float | None = 3.0
 
     def __init__(
         self,
         api_key: str | None = None,
         timeout: int = DEFAULT_TIMEOUT,
         max_retries: int = MAX_RETRIES,
+        max_concurrent_requests: int | None = None,
+        requests_per_second: float | None = None,
     ) -> None:
         """Initialize the ORTEX API client.
 
@@ -68,7 +81,13 @@ class OrtexClient:
                 ORTEX_API_KEY environment variable.
             timeout: Request timeout in seconds. Defaults to 30.
             max_retries: Maximum number of retry attempts for rate-limited
-                requests. Defaults to 5.
+                or timed-out requests. Defaults to 5.
+            max_concurrent_requests: Maximum number of concurrent requests
+                allowed. Defaults to 10. Set to 0 to disable throttling.
+                This is useful when using the client from multiple threads.
+            requests_per_second: Maximum requests per second (rate limit).
+                Defaults to None (no rate limit). When set, requests are
+                spaced to maintain this rate across all threads.
 
         Raises:
             AuthenticationError: If no API key is provided or found in environment.
@@ -81,6 +100,13 @@ class OrtexClient:
             >>> import os
             >>> os.environ["ORTEX_API_KEY"] = "your-api-key"
             >>> client = OrtexClient()
+            >>>
+            >>> # With throttling for multi-threaded usage
+            >>> client = OrtexClient(
+            ...     api_key="your-api-key",
+            ...     max_concurrent_requests=10,  # Max 10 concurrent requests
+            ...     requests_per_second=5.0,     # Max 5 requests per second
+            ... )
         """
         self.api_key = api_key or os.environ.get("ORTEX_API_KEY")
         if not self.api_key:
@@ -92,13 +118,30 @@ class OrtexClient:
 
         self.timeout = timeout
         self.max_retries = max_retries
+
+        # Initialize throttler for concurrent request limiting
+        effective_max_concurrent = (
+            max_concurrent_requests
+            if max_concurrent_requests is not None
+            else self.DEFAULT_MAX_CONCURRENT
+        )
+        effective_requests_per_second = (
+            requests_per_second
+            if requests_per_second is not None
+            else self.DEFAULT_REQUESTS_PER_SECOND
+        )
+        self._throttler = RequestThrottler(
+            max_concurrent=effective_max_concurrent,
+            requests_per_second=effective_requests_per_second,
+        )
+
         self._session = requests.Session()
         self._session.headers.update(
             {
                 "Ortex-Api-Key": self.api_key,
                 "Content-Type": "application/json",
                 "Accept": "application/json",
-                "User-Agent": "ortex-python-sdk/1.0.3",
+                "User-Agent": "ortex-python-sdk/1.0.4",
             }
         )
 
@@ -160,6 +203,20 @@ class OrtexClient:
         else:
             raise APIError(message, status_code=response.status_code)
 
+    @property
+    def throttler(self) -> RequestThrottler:
+        """Get the request throttler for this client.
+
+        Returns:
+            The RequestThrottler instance used by this client.
+
+        Example:
+            >>> client = OrtexClient(api_key="your-key")
+            >>> stats = client.throttler.stats
+            >>> print(f"Total requests: {stats['total_requests']}")
+        """
+        return self._throttler
+
     def get(
         self,
         endpoint: str,
@@ -168,7 +225,8 @@ class OrtexClient:
         """Make a GET request to the ORTEX API with automatic retry.
 
         This method includes automatic retry with exponential backoff for
-        rate-limited requests (429) and transient server errors (5xx).
+        rate-limited requests (429), transient server errors (5xx), and
+        timeouts. Requests are also throttled to prevent overwhelming the API.
 
         Args:
             endpoint: API endpoint path (e.g., "NYSE/F/short_interest").
@@ -184,7 +242,7 @@ class OrtexClient:
             ValidationError: If request validation fails.
             ServerError: If server error after all retries.
             NetworkError: If network connection fails.
-            TimeoutError: If request times out.
+            TimeoutError: If request times out after all retries.
 
         Example:
             >>> client = OrtexClient(api_key="your-key")
@@ -192,7 +250,7 @@ class OrtexClient:
         """
 
         @retry(
-            retry=retry_if_exception_type((RateLimitError, ServerError)),
+            retry=retry_if_exception_type((RateLimitError, ServerError, TimeoutError)),
             stop=stop_after_attempt(self.max_retries),
             wait=wait_exponential(
                 multiplier=1,
@@ -202,19 +260,21 @@ class OrtexClient:
             reraise=True,
         )
         def _request() -> Any:
-            try:
-                response = self._session.get(
-                    self._build_url(endpoint),
-                    params=params,
-                    timeout=self.timeout,
-                )
-                return self._handle_response(response)
-            except requests.exceptions.Timeout as e:
-                raise TimeoutError(f"Request to {endpoint} timed out") from e
-            except requests.exceptions.ConnectionError as e:
-                raise NetworkError(f"Failed to connect to ORTEX API: {e}") from e
-            except requests.exceptions.RequestException as e:
-                raise NetworkError(f"Request failed: {e}") from e
+            # Use throttler to limit concurrent requests
+            with self._throttler.acquire():
+                try:
+                    response = self._session.get(
+                        self._build_url(endpoint),
+                        params=params,
+                        timeout=self.timeout,
+                    )
+                    return self._handle_response(response)
+                except requests.exceptions.Timeout as e:
+                    raise TimeoutError(f"Request to {endpoint} timed out") from e
+                except requests.exceptions.ConnectionError as e:
+                    raise NetworkError(f"Failed to connect to ORTEX API: {e}") from e
+                except requests.exceptions.RequestException as e:
+                    raise NetworkError(f"Request failed: {e}") from e
 
         try:
             return _request()
