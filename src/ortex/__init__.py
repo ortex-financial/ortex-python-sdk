@@ -16,7 +16,7 @@ Full documentation: https://docs.ortex.com
 
 from __future__ import annotations
 
-__version__ = "1.0.3"
+__version__ = "1.0.4"
 __author__ = "ORTEX Technologies LTD"
 
 from .api import (
@@ -60,6 +60,7 @@ from .exceptions import (
     ValidationError,
 )
 from .response import OrtexResponse
+from .throttler import RequestThrottler
 
 __all__ = [
     # Version
@@ -67,6 +68,7 @@ __all__ = [
     # Core
     "OrtexClient",
     "OrtexResponse",
+    "RequestThrottler",
     # Configuration
     "set_api_key",
     "get_client",
