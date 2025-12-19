@@ -41,9 +41,7 @@ class RequestThrottler:
 
         # Semaphore for limiting concurrent requests
         if max_concurrent > 0:
-            self._semaphore: threading.Semaphore | None = threading.Semaphore(
-                max_concurrent
-            )
+            self._semaphore: threading.Semaphore | None = threading.Semaphore(max_concurrent)
         else:
             self._semaphore = None
 
@@ -150,13 +148,9 @@ class RequestThrottler:
         try:
             # Wait for concurrent slot
             if self._semaphore is not None:
-                acquired = self._semaphore.acquire(
-                    blocking=True, timeout=timeout
-                )
+                acquired = self._semaphore.acquire(blocking=True, timeout=timeout)
                 if not acquired:
-                    raise TimeoutError(
-                        f"Timed out waiting for request slot after {timeout}s"
-                    )
+                    raise TimeoutError(f"Timed out waiting for request slot after {timeout}s")
             else:
                 acquired = True
 
