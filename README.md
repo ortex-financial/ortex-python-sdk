@@ -1,6 +1,6 @@
 # ORTEX Python SDK
 
-Official Python SDK for the ORTEX Financial Data API. Access comprehensive financial data including short interest, stock prices, fundamentals, and more.
+Official Python SDK for the ORTEX Financial Data API. Access comprehensive financial data including short interest, stock prices, options, fundamentals, stock scores, and more.
 
 [![PyPI version](https://img.shields.io/pypi/v/ortex.svg)](https://pypi.org/project/ortex/)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
@@ -9,10 +9,14 @@ Official Python SDK for the ORTEX Financial Data API. Access comprehensive finan
 ## Features
 
 - **Short Interest Data** - Shares on loan, utilization, cost to borrow, days to cover
+- **Official Short Interest** - FINRA-reported short interest for US, Canada, Australia, Hong Kong
 - **Stock Prices** - OHLCV data with historical support
-- **Stock Data** - Free float, shares outstanding
+- **Stock Data** - Free float, shares outstanding, stock splits
+- **Stock Scores** - Quality, value, momentum, growth scores with custom weights
+- **Options Data** - Option chains, expiries, greeks, implied volatility, put/call ratios
 - **Fundamentals** - Income statements, balance sheets, cash flow, ratios
 - **EU Short Interest** - European regulatory short positions
+- **US Government Trades** - Congressional stock trading disclosures
 - **Market Data** - Earnings calendar, macro events, exchanges
 - **Pagination Support** - Automatic pagination with `iter_all_pages()`
 - **Credit Tracking** - Monitor API credit usage with `credits_used` and `credits_left`
@@ -134,6 +138,10 @@ response = ortex.get_cost_to_borrow("NYSE", "AMC", loan_type="new")
 
 # Days to cover
 response = ortex.get_days_to_cover("NYSE", "AMC")
+
+# Official (FINRA-reported) short interest for US, CA, AU, HK
+response = ortex.get_official_short_interest("AAPL", "US", "2024-01-01")
+response = ortex.get_official_short_interest("AAPL", "US", "2024-01-01", "2024-06-30")
 ```
 
 ### Index Short Data
@@ -163,8 +171,46 @@ response = ortex.get_close_price("NASDAQ", "AAPL")
 # Free float shares (from_date is required)
 response = ortex.get_free_float("NYSE", "F", "2024-01-01")
 
-# Shares outstanding (uses free_float endpoint)
+# Shares outstanding
 response = ortex.get_shares_outstanding("NYSE", "F", "2024-01-01")
+
+# Stock splits history
+response = ortex.get_stock_splits("NASDAQ", "AAPL")
+response = ortex.get_stock_splits("NASDAQ", "AAPL", from_date="2020-01-01")
+```
+
+### Stock Scores
+
+```python
+# Get stock scores with default weights (quality, value, momentum, growth, total)
+response = ortex.get_stock_scores("NASDAQ", "AAPL")
+response = ortex.get_stock_scores("NASDAQ", "AAPL", from_date="2025-01-01")
+df = response.df
+
+# Get stock scores with custom weights
+weights = {"quality": 50, "growth": 50, "momentum": 65, "dtc": 100, "fcf_assets": 100}
+response = ortex.get_stock_scores_custom("NASDAQ", "AAPL", weights)
+```
+
+### Options
+
+```python
+# List available option expiry dates
+response = ortex.get_options_expiries("NASDAQ", "AAPL")
+
+# Get full option chain for a specific expiry
+response = ortex.get_options_chain("NASDAQ", "AAPL", "2025-03-21")
+
+# Get option details (greeks, implied vol, open interest, etc.)
+response = ortex.get_options_details("NASDAQ", "AAPL", "implied_vol")
+response = ortex.get_options_details("NASDAQ", "AAPL", "delta")
+# Available parameters: oi, volume, last_price, last_size, ask_price, ask_size,
+#   bid_price, bid_size, implied_vol, delta, gamma, theta, vega, rho,
+#   put_call_oi_ratio, put_call_volume_ratio
+
+# Get put/call ratio sentiment
+response = ortex.get_options_sentiment("NASDAQ", "AAPL")
+response = ortex.get_options_sentiment("NASDAQ", "AAPL", days_fwd=30)
 ```
 
 ### Fundamentals
@@ -208,6 +254,27 @@ response = ortex.get_eu_short_positions_history("XETR", "SAP", "2024-01-01", "20
 response = ortex.get_eu_short_total("XETR", "SAP")
 ```
 
+### US Government Trades
+
+```python
+# Get all recent congressional trades
+response = ortex.get_us_government_trades()
+
+# Filter by ticker
+response = ortex.get_us_government_trades(ticker="AAPL")
+
+# Filter by party, chamber, transaction type
+response = ortex.get_us_government_trades(party="democrat", chamber="senate")
+response = ortex.get_us_government_trades(transaction_type="buy")
+
+# Filter by date range and filer
+response = ortex.get_us_government_trades(
+    from_date="2024-01-01",
+    to_date="2024-12-31",
+    filer_name="John Doe",
+)
+```
+
 ### Market Data
 
 ```python
@@ -239,6 +306,12 @@ data = client.get("NYSE/AMC/short_interest")
 # Make requests with OrtexResponse wrapper
 response = client.fetch("NYSE/AMC/short_interest")
 df = response.df
+
+# POST requests (e.g., stock scores with custom weights)
+response = client.fetch_post(
+    "stock/NASDAQ/AAPL/stock_scores",
+    json={"weights": {"quality": 50, "growth": 50}},
+)
 
 # Use as context manager
 with OrtexClient(api_key="your-api-key") as client:
@@ -332,4 +405,4 @@ MIT License - ORTEX Technologies LTD
 
 ## Version
 
-1.0.3
+1.0.5

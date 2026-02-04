@@ -285,6 +285,67 @@ class OrtexClient:
                 raise exc from e
             raise APIError("Request failed after retries") from e
 
+    def post(
+        self,
+        endpoint: str,
+        params: dict[str, Any] | None = None,
+        json: dict[str, Any] | None = None,
+    ) -> Any:
+        """Make a POST request to the ORTEX API with automatic retry.
+
+        Args:
+            endpoint: API endpoint path.
+            params: Optional query parameters.
+            json: Optional JSON body.
+
+        Returns:
+            Parsed JSON response data.
+
+        Raises:
+            AuthenticationError: If authentication fails.
+            RateLimitError: If rate limit exceeded after all retries.
+            NotFoundError: If resource not found.
+            ValidationError: If request validation fails.
+            ServerError: If server error after all retries.
+            NetworkError: If network connection fails.
+            TimeoutError: If request times out after all retries.
+        """
+
+        @retry(
+            retry=retry_if_exception_type((RateLimitError, ServerError, TimeoutError)),
+            stop=stop_after_attempt(self.max_retries),
+            wait=wait_exponential(
+                multiplier=1,
+                min=self.MIN_RETRY_WAIT,
+                max=self.MAX_RETRY_WAIT,
+            ),
+            reraise=True,
+        )
+        def _request() -> Any:
+            with self._throttler.acquire():
+                try:
+                    response = self._session.post(
+                        self._build_url(endpoint),
+                        params=params,
+                        json=json,
+                        timeout=self.timeout,
+                    )
+                    return self._handle_response(response)
+                except requests.exceptions.Timeout as e:
+                    raise TimeoutError(f"Request to {endpoint} timed out") from e
+                except requests.exceptions.ConnectionError as e:
+                    raise NetworkError(f"Failed to connect to ORTEX API: {e}") from e
+                except requests.exceptions.RequestException as e:
+                    raise NetworkError(f"Request failed: {e}") from e
+
+        try:
+            return _request()
+        except RetryError as e:
+            exc = e.last_attempt.exception()
+            if exc is not None:
+                raise exc from e
+            raise APIError("Request failed after retries") from e
+
     def fetch(
         self,
         endpoint: str,
@@ -311,6 +372,32 @@ class OrtexClient:
         from .response import OrtexResponse
 
         raw = self.get(endpoint, params)
+        return OrtexResponse(
+            raw_response=raw,
+            client=self,
+            endpoint=endpoint,
+            params=params,
+        )
+
+    def fetch_post(
+        self,
+        endpoint: str,
+        params: dict[str, Any] | None = None,
+        json: dict[str, Any] | None = None,
+    ) -> OrtexResponse:
+        """Make a POST request and return an OrtexResponse.
+
+        Args:
+            endpoint: API endpoint path.
+            params: Optional query parameters.
+            json: Optional JSON body.
+
+        Returns:
+            OrtexResponse with data, pagination links, and credit info.
+        """
+        from .response import OrtexResponse
+
+        raw = self.post(endpoint, params, json)
         return OrtexResponse(
             raw_response=raw,
             client=self,
