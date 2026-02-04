@@ -167,6 +167,84 @@ class TestOrtexClientGet:
             client.get("test/endpoint")
 
 
+class TestOrtexClientPost:
+    """Tests for OrtexClient.post method."""
+
+    @responses.activate
+    def test_post_success(self, api_key: str) -> None:
+        """Test successful POST request."""
+        data = {"quality": 69.5, "total": 78.0}
+        responses.add(
+            responses.POST,
+            "https://api.ortex.com/api/v1/test/endpoint",
+            json=data,
+            status=200,
+        )
+
+        client = OrtexClient(api_key=api_key)
+        result = client.post("test/endpoint", json={"weights": {"quality": 50}})
+
+        assert result == data
+
+    @responses.activate
+    def test_post_with_params(self, api_key: str) -> None:
+        """Test POST request with query parameters."""
+        data = {"quality": 69.5}
+        responses.add(
+            responses.POST,
+            "https://api.ortex.com/api/v1/test/endpoint",
+            json=data,
+            status=200,
+            match=[matchers.query_param_matcher({"from_date": "2024-01-01"})],
+        )
+
+        client = OrtexClient(api_key=api_key)
+        result = client.post(
+            "test/endpoint",
+            params={"from_date": "2024-01-01"},
+            json={"weights": {}},
+        )
+
+        assert result == data
+
+    @responses.activate
+    def test_post_401_raises_authentication_error(self, api_key: str) -> None:
+        """Test that 401 response on POST raises AuthenticationError."""
+        responses.add(
+            responses.POST,
+            "https://api.ortex.com/api/v1/test/endpoint",
+            json={"error": "Invalid API key"},
+            status=401,
+        )
+
+        client = OrtexClient(api_key=api_key)
+        with pytest.raises(AuthenticationError):
+            client.post("test/endpoint", json={})
+
+    @responses.activate
+    def test_fetch_post(self, api_key: str) -> None:
+        """Test fetch_post returns OrtexResponse."""
+        data = {
+            "paginationLinks": {"next": None, "previous": None},
+            "length": 1,
+            "rows": [{"quality": 69.5, "total": 78.0}],
+            "creditsUsed": 1.0,
+            "creditsLeft": 999.0,
+        }
+        responses.add(
+            responses.POST,
+            "https://api.ortex.com/api/v1/test/endpoint",
+            json=data,
+            status=200,
+        )
+
+        client = OrtexClient(api_key=api_key)
+        from ortex import OrtexResponse
+
+        response = client.fetch_post("test/endpoint", json={"weights": {}})
+        assert isinstance(response, OrtexResponse)
+
+
 class TestOrtexClientContextManager:
     """Tests for OrtexClient context manager."""
 

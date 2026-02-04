@@ -475,8 +475,6 @@ def get_shares_outstanding(
 ) -> OrtexResponse:
     """Get shares outstanding data for a stock.
 
-    This uses the free_float endpoint which includes shares outstanding.
-
     Args:
         exchange: Exchange code (e.g., "NYSE", "NASDAQ").
         ticker: Stock ticker symbol.
@@ -492,9 +490,20 @@ def get_shares_outstanding(
     Example:
         >>> response = ortex.get_shares_outstanding("NYSE", "F", "2024-01-01")
     """
-    return get_free_float(
-        exchange, ticker, from_date, to_date, page_size=page_size, page=page, api_key=api_key
-    )
+    client = get_client(api_key)
+    exchange = normalize_exchange(exchange)
+    ticker = normalize_ticker(ticker)
+
+    endpoint = f"stock/{exchange}/{ticker}/shares_outstanding"
+    params: dict[str, Any] = {"from_date": normalize_date(from_date)}
+    if to_date:
+        params["to_date"] = normalize_date(to_date)
+    if page_size is not None:
+        params["page_size"] = page_size
+    if page is not None:
+        params["page"] = page
+
+    return client.fetch(endpoint, params=params)
 
 
 # =============================================================================
@@ -1038,3 +1047,437 @@ def get_index_days_to_cover(
         params["page"] = page
 
     return client.fetch(endpoint, params=params)
+
+
+# =============================================================================
+# Options Functions
+# =============================================================================
+
+
+def get_options_chain(
+    exchange: str,
+    ticker: str,
+    expiry: str | date | datetime,
+    as_of_date: str | date | datetime | None = None,
+    page_size: int | None = None,
+    page: int | None = None,
+    api_key: str | None = None,
+) -> OrtexResponse:
+    """Get the complete option chain for a stock.
+
+    Retrieves all option contracts for a given ticker and expiry date,
+    including strike prices, open interest, volume, and bid/ask data.
+
+    Args:
+        exchange: Exchange code (e.g., "NYSE", "NASDAQ").
+        ticker: Stock ticker symbol.
+        expiry: Option expiry date (required).
+        as_of_date: Date for the data snapshot. If None, returns latest.
+        page_size: Number of results per page.
+        page: Page number for pagination.
+        api_key: Optional API key override.
+
+    Returns:
+        OrtexResponse with option chain data.
+
+    Example:
+        >>> response = ortex.get_options_chain("NASDAQ", "AAPL", "2025-03-21")
+        >>> df = response.df
+    """
+    client = get_client(api_key)
+    exchange = normalize_exchange(exchange)
+    ticker = normalize_ticker(ticker)
+
+    endpoint = f"stock/{exchange}/{ticker}/options/chain"
+    params: dict[str, Any] = {"expiry": normalize_date(expiry)}
+    if as_of_date:
+        params["as_of_date"] = normalize_date(as_of_date)
+    if page_size is not None:
+        params["page_size"] = page_size
+    if page is not None:
+        params["page"] = page
+
+    return client.fetch(endpoint, params=params)
+
+
+def get_options_details(
+    exchange: str,
+    ticker: str,
+    parameter_name: str,
+    as_of_date: str | date | datetime | None = None,
+    days_back: int | None = None,
+    api_key: str | None = None,
+) -> OrtexResponse:
+    """Get option metrics for a stock.
+
+    Retrieves a specific option metric such as open interest, volume,
+    implied volatility, or greeks.
+
+    Args:
+        exchange: Exchange code (e.g., "NYSE", "NASDAQ").
+        ticker: Stock ticker symbol.
+        parameter_name: Metric to retrieve. One of: "oi", "volume",
+            "last_price", "last_size", "ask_price", "ask_size",
+            "bid_price", "bid_size", "implied_vol", "delta", "gamma",
+            "theta", "vega", "rho", "put_call_oi_ratio",
+            "put_call_volume_ratio".
+        as_of_date: Date for the data snapshot. If None, returns latest.
+        days_back: Number of days back from today (ignored if as_of_date set).
+        api_key: Optional API key override.
+
+    Returns:
+        OrtexResponse with option detail data.
+
+    Example:
+        >>> response = ortex.get_options_details("NASDAQ", "AAPL", "implied_vol")
+    """
+    client = get_client(api_key)
+    exchange = normalize_exchange(exchange)
+    ticker = normalize_ticker(ticker)
+
+    endpoint = f"stock/{exchange}/{ticker}/options/details/{parameter_name}"
+    params: dict[str, Any] = {}
+    if as_of_date:
+        params["as_of_date"] = normalize_date(as_of_date)
+    if days_back is not None:
+        params["days_back"] = days_back
+
+    return client.fetch(endpoint, params=params if params else None)
+
+
+def get_options_expiries(
+    exchange: str,
+    ticker: str,
+    page_size: int | None = None,
+    page: int | None = None,
+    api_key: str | None = None,
+) -> OrtexResponse:
+    """Get available option expiry dates for a stock.
+
+    Args:
+        exchange: Exchange code (e.g., "NYSE", "NASDAQ").
+        ticker: Stock ticker symbol.
+        page_size: Number of results per page.
+        page: Page number for pagination.
+        api_key: Optional API key override.
+
+    Returns:
+        OrtexResponse with option expiry dates.
+
+    Example:
+        >>> response = ortex.get_options_expiries("NASDAQ", "AAPL")
+        >>> df = response.df
+    """
+    client = get_client(api_key)
+    exchange = normalize_exchange(exchange)
+    ticker = normalize_ticker(ticker)
+
+    endpoint = f"stock/{exchange}/{ticker}/options/expiries"
+    params: dict[str, Any] = {}
+    if page_size is not None:
+        params["page_size"] = page_size
+    if page is not None:
+        params["page"] = page
+
+    return client.fetch(endpoint, params=params if params else None)
+
+
+def get_options_sentiment(
+    exchange: str,
+    ticker: str,
+    days_fwd: int | None = None,
+    api_key: str | None = None,
+) -> OrtexResponse:
+    """Get Put/Call Ratio (PCR) sentiment data for a stock.
+
+    Retrieves current and historical put/call ratios based on both
+    open interest and trading volume.
+
+    Args:
+        exchange: Exchange code (e.g., "NYSE", "NASDAQ").
+        ticker: Stock ticker symbol.
+        days_fwd: Consider contracts expiring within this many days
+            (default 1000).
+        api_key: Optional API key override.
+
+    Returns:
+        OrtexResponse with PCR sentiment data.
+
+    Example:
+        >>> response = ortex.get_options_sentiment("NASDAQ", "AAPL")
+    """
+    client = get_client(api_key)
+    exchange = normalize_exchange(exchange)
+    ticker = normalize_ticker(ticker)
+
+    endpoint = f"stock/{exchange}/{ticker}/options/sentiment/pcr"
+    params: dict[str, Any] = {}
+    if days_fwd is not None:
+        params["days_fwd"] = days_fwd
+
+    return client.fetch(endpoint, params=params if params else None)
+
+
+# =============================================================================
+# Stock Scores Functions
+# =============================================================================
+
+
+def get_stock_scores(
+    exchange: str,
+    ticker: str,
+    from_date: str | date | datetime | None = None,
+    page_size: int | None = None,
+    page: int | None = None,
+    api_key: str | None = None,
+) -> OrtexResponse:
+    """Get stock scores using default weights.
+
+    Returns quality, value, momentum, growth, and total scores for a stock.
+
+    Args:
+        exchange: Exchange code (e.g., "NYSE", "NASDAQ").
+        ticker: Stock ticker symbol.
+        from_date: Start date for historical scores.
+        page_size: Number of results per page.
+        page: Page number for pagination.
+        api_key: Optional API key override.
+
+    Returns:
+        OrtexResponse with stock score data.
+
+    Example:
+        >>> response = ortex.get_stock_scores("NASDAQ", "AAPL")
+        >>> df = response.df
+    """
+    client = get_client(api_key)
+    exchange = normalize_exchange(exchange)
+    ticker = normalize_ticker(ticker)
+
+    endpoint = f"stock/{exchange}/{ticker}/stock_scores"
+    params: dict[str, Any] = {}
+    if from_date:
+        params["from_date"] = normalize_date(from_date)
+    if page_size is not None:
+        params["page_size"] = page_size
+    if page is not None:
+        params["page"] = page
+
+    return client.fetch(endpoint, params=params if params else None)
+
+
+def get_stock_scores_custom(
+    exchange: str,
+    ticker: str,
+    weights: dict[str, float],
+    from_date: str | date | datetime | None = None,
+    api_key: str | None = None,
+) -> OrtexResponse:
+    """Get stock scores with custom weights.
+
+    Allows customizing the weight of each metric in the scoring model.
+    Metrics not specified default to 0.
+
+    Args:
+        exchange: Exchange code (e.g., "NYSE", "NASDAQ").
+        ticker: Stock ticker symbol.
+        weights: Dictionary of metric weights. Keys can include quality
+            family metrics (e.g., "quality", "dtc", "roa"), growth metrics
+            (e.g., "growth", "internal_growth"), momentum metrics
+            (e.g., "momentum", "high_52w"), etc.
+        from_date: Start date for historical scores.
+        api_key: Optional API key override.
+
+    Returns:
+        OrtexResponse with custom-weighted stock score data.
+
+    Example:
+        >>> weights = {"quality": 50, "growth": 50, "momentum": 65}
+        >>> response = ortex.get_stock_scores_custom("NASDAQ", "AAPL", weights)
+    """
+    client = get_client(api_key)
+    exchange = normalize_exchange(exchange)
+    ticker = normalize_ticker(ticker)
+
+    endpoint = f"stock/{exchange}/{ticker}/stock_scores"
+    params: dict[str, Any] = {}
+    if from_date:
+        params["from_date"] = normalize_date(from_date)
+
+    return client.fetch_post(endpoint, params=params if params else None, json={"weights": weights})
+
+
+# =============================================================================
+# Stock Splits Functions
+# =============================================================================
+
+
+def get_stock_splits(
+    exchange: str,
+    ticker: str,
+    from_date: str | date | datetime | None = None,
+    page_size: int | None = None,
+    page: int | None = None,
+    api_key: str | None = None,
+) -> OrtexResponse:
+    """Get stock split history for a stock.
+
+    Returns split dates, ratios, and split types (forward/reverse).
+
+    Args:
+        exchange: Exchange code (e.g., "NYSE", "NASDAQ").
+        ticker: Stock ticker symbol.
+        from_date: Start date for historical data.
+        page_size: Number of results per page.
+        page: Page number for pagination.
+        api_key: Optional API key override.
+
+    Returns:
+        OrtexResponse with stock split data.
+
+    Example:
+        >>> response = ortex.get_stock_splits("NASDAQ", "AAPL")
+        >>> df = response.df
+    """
+    client = get_client(api_key)
+    exchange = normalize_exchange(exchange)
+    ticker = normalize_ticker(ticker)
+
+    endpoint = f"stock/{exchange}/{ticker}/stock_splits"
+    params: dict[str, Any] = {}
+    if from_date:
+        params["from_date"] = normalize_date(from_date)
+    if page_size is not None:
+        params["page_size"] = page_size
+    if page is not None:
+        params["page"] = page
+
+    return client.fetch(endpoint, params=params if params else None)
+
+
+# =============================================================================
+# Official Short Interest Functions
+# =============================================================================
+
+
+def get_official_short_interest(
+    ticker: str,
+    country_code: str,
+    settlement_from_date: str | date | datetime,
+    settlement_to_date: str | date | datetime | None = None,
+    page_size: int | None = None,
+    page: int | None = None,
+    api_key: str | None = None,
+) -> OrtexResponse:
+    """Get official (FINRA-reported) short interest data.
+
+    Returns officially filed short interest for US, Canada, Australia,
+    and Hong Kong.
+
+    Args:
+        ticker: Stock ticker symbol (e.g., "AAPL").
+        country_code: 2-character ISO country code: "US", "CA", "AU", "HK".
+        settlement_from_date: Starting settlement date (required).
+        settlement_to_date: Ending settlement date. Defaults to
+            settlement_from_date if not provided.
+        page_size: Number of results per page.
+        page: Page number for pagination.
+        api_key: Optional API key override.
+
+    Returns:
+        OrtexResponse with official short interest data.
+
+    Example:
+        >>> response = ortex.get_official_short_interest("AAPL", "US", "2024-01-01")
+        >>> df = response.df
+    """
+    client = get_client(api_key)
+
+    endpoint = "stock/official_short_interest"
+    params: dict[str, Any] = {
+        "ticker": normalize_ticker(ticker),
+        "country_code": country_code.upper(),
+        "settlement_from_date": normalize_date(settlement_from_date),
+    }
+    if settlement_to_date:
+        params["settlement_to_date"] = normalize_date(settlement_to_date)
+    if page_size is not None:
+        params["page_size"] = page_size
+    if page is not None:
+        params["page"] = page
+
+    return client.fetch(endpoint, params=params)
+
+
+# =============================================================================
+# US Government Trades Functions
+# =============================================================================
+
+
+def get_us_government_trades(
+    from_date: str | date | datetime | None = None,
+    to_date: str | date | datetime | None = None,
+    ticker: str | None = None,
+    exchange: str | None = None,
+    filer_name: str | None = None,
+    party: str | None = None,
+    chamber: str | None = None,
+    transaction_type: str | None = None,
+    page_size: int | None = None,
+    page: int | None = None,
+    api_key: str | None = None,
+) -> OrtexResponse:
+    """Get US government officials' stock trades.
+
+    Returns disclosed stock transactions filed by members of the
+    U.S. Congress, including transaction details, filer info, and
+    committee memberships.
+
+    Args:
+        from_date: Transaction start date. Defaults to one year back.
+        to_date: Transaction end date. Defaults to today.
+        ticker: Filter by stock ticker (e.g., "AAPL").
+        exchange: Filter by exchange symbol (e.g., "NYSE").
+        filer_name: Filter by filer name.
+        party: Filter by political party ("republican", "democrat",
+            "independent").
+        chamber: Filter by congressional chamber ("house", "senate").
+        transaction_type: Filter by transaction type ("buy", "sell",
+            "Sell (Partial)").
+        page_size: Number of results per page.
+        page: Page number for pagination.
+        api_key: Optional API key override.
+
+    Returns:
+        OrtexResponse with government trade data.
+
+    Example:
+        >>> response = ortex.get_us_government_trades(ticker="AAPL")
+        >>> response = ortex.get_us_government_trades(party="democrat", chamber="senate")
+    """
+    client = get_client(api_key)
+
+    endpoint = "us_government_trades"
+    params: dict[str, Any] = {}
+    if from_date:
+        params["from_date"] = normalize_date(from_date)
+    if to_date:
+        params["to_date"] = normalize_date(to_date)
+    if ticker:
+        params["ticker"] = normalize_ticker(ticker)
+    if exchange:
+        params["exchange"] = exchange
+    if filer_name:
+        params["filerName"] = filer_name
+    if party:
+        params["party"] = party.lower()
+    if chamber:
+        params["chamber"] = chamber.lower()
+    if transaction_type:
+        params["transactionType"] = transaction_type
+    if page_size is not None:
+        params["page_size"] = page_size
+    if page is not None:
+        params["page"] = page
+
+    return client.fetch(endpoint, params=params if params else None)

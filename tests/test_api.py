@@ -306,7 +306,7 @@ class TestStockDataFunctions:
         rows = [{"date": "2024-12-17", "sharesOutstanding": 600000000}]
         responses.add(
             responses.GET,
-            "https://api.ortex.com/api/v1/stock/NYSE/F/free_float",
+            "https://api.ortex.com/api/v1/stock/NYSE/F/shares_outstanding",
             json=make_paginated_response(rows),
             status=200,
         )
@@ -615,6 +615,396 @@ class TestOrtexResponseFeatures:
         assert response.length == 200
         assert response.has_next_page is True
         assert response.has_previous_page is False
+
+
+class TestOptionsFunctions:
+    """Tests for options API functions."""
+
+    @responses.activate
+    def test_get_options_chain(self, api_key: str) -> None:
+        """Test get_options_chain function."""
+        rows = [
+            {
+                "strike_price": 100.0,
+                "option_type": "call",
+                "oi": 1500,
+                "volume": 300,
+                "last_price": 5.5,
+            }
+        ]
+        responses.add(
+            responses.GET,
+            "https://api.ortex.com/api/v1/stock/NASDAQ/AAPL/options/chain",
+            json=make_paginated_response(rows),
+            status=200,
+        )
+
+        ortex.set_api_key(api_key)
+        response = ortex.get_options_chain("NASDAQ", "AAPL", "2025-03-21")
+
+        assert isinstance(response, OrtexResponse)
+        assert isinstance(response.df, pd.DataFrame)
+        assert "strike_price" in response.df.columns
+
+    @responses.activate
+    def test_get_options_chain_with_as_of_date(self, api_key: str) -> None:
+        """Test get_options_chain with as_of_date parameter."""
+        rows = [{"strike_price": 100.0, "option_type": "call", "oi": 1500}]
+        responses.add(
+            responses.GET,
+            "https://api.ortex.com/api/v1/stock/NASDAQ/AAPL/options/chain",
+            json=make_paginated_response(rows),
+            status=200,
+        )
+
+        ortex.set_api_key(api_key)
+        response = ortex.get_options_chain("NASDAQ", "AAPL", "2025-03-21", as_of_date="2025-01-15")
+
+        assert isinstance(response, OrtexResponse)
+        assert isinstance(response.df, pd.DataFrame)
+
+    @responses.activate
+    def test_get_options_details(self, api_key: str) -> None:
+        """Test get_options_details function."""
+        rows = [{"date": "2025-01-15", "implied_vol": 0.35}]
+        responses.add(
+            responses.GET,
+            "https://api.ortex.com/api/v1/stock/NASDAQ/AAPL/options/details/implied_vol",
+            json=make_paginated_response(rows),
+            status=200,
+        )
+
+        ortex.set_api_key(api_key)
+        response = ortex.get_options_details("NASDAQ", "AAPL", "implied_vol")
+
+        assert isinstance(response, OrtexResponse)
+        assert isinstance(response.df, pd.DataFrame)
+
+    @responses.activate
+    def test_get_options_details_with_days_back(self, api_key: str) -> None:
+        """Test get_options_details with days_back parameter."""
+        rows = [{"date": "2025-01-10", "delta": 0.55}]
+        responses.add(
+            responses.GET,
+            "https://api.ortex.com/api/v1/stock/NASDAQ/AAPL/options/details/delta",
+            json=make_paginated_response(rows),
+            status=200,
+        )
+
+        ortex.set_api_key(api_key)
+        response = ortex.get_options_details("NASDAQ", "AAPL", "delta", days_back=5)
+
+        assert isinstance(response, OrtexResponse)
+        assert isinstance(response.df, pd.DataFrame)
+
+    @responses.activate
+    def test_get_options_expiries(self, api_key: str) -> None:
+        """Test get_options_expiries function."""
+        rows = [
+            {"exp_date": "2025-02-10"},
+            {"exp_date": "2025-02-24"},
+            {"exp_date": "2025-03-10"},
+        ]
+        responses.add(
+            responses.GET,
+            "https://api.ortex.com/api/v1/stock/NASDAQ/AAPL/options/expiries",
+            json=make_paginated_response(rows),
+            status=200,
+        )
+
+        ortex.set_api_key(api_key)
+        response = ortex.get_options_expiries("NASDAQ", "AAPL")
+
+        assert isinstance(response, OrtexResponse)
+        assert isinstance(response.df, pd.DataFrame)
+        assert len(response.df) == 3
+
+    @responses.activate
+    def test_get_options_sentiment(self, api_key: str) -> None:
+        """Test get_options_sentiment function."""
+        data = {
+            "current_date": "2025-07-25",
+            "PCR_oi_current": 1.19,
+            "PCR_vol_current": 0.65,
+        }
+        responses.add(
+            responses.GET,
+            "https://api.ortex.com/api/v1/stock/NASDAQ/AAPL/options/sentiment/pcr",
+            json=data,
+            status=200,
+        )
+
+        ortex.set_api_key(api_key)
+        response = ortex.get_options_sentiment("NASDAQ", "AAPL")
+
+        assert isinstance(response, OrtexResponse)
+
+    @responses.activate
+    def test_get_options_sentiment_with_days_fwd(self, api_key: str) -> None:
+        """Test get_options_sentiment with days_fwd parameter."""
+        data = {"current_date": "2025-07-25", "PCR_oi_current": 1.19}
+        responses.add(
+            responses.GET,
+            "https://api.ortex.com/api/v1/stock/NASDAQ/AAPL/options/sentiment/pcr",
+            json=data,
+            status=200,
+        )
+
+        ortex.set_api_key(api_key)
+        response = ortex.get_options_sentiment("NASDAQ", "AAPL", days_fwd=30)
+
+        assert isinstance(response, OrtexResponse)
+
+
+class TestStockScoresFunctions:
+    """Tests for stock scores API functions."""
+
+    @responses.activate
+    def test_get_stock_scores(self, api_key: str) -> None:
+        """Test get_stock_scores function."""
+        rows = [
+            {
+                "quality": 69.59,
+                "value": 38.83,
+                "momentum": 77.93,
+                "growth": 69.86,
+                "total": 78.01,
+                "date": "2025-02-24",
+            }
+        ]
+        responses.add(
+            responses.GET,
+            "https://api.ortex.com/api/v1/stock/NASDAQ/AAPL/stock_scores",
+            json=make_paginated_response(rows),
+            status=200,
+        )
+
+        ortex.set_api_key(api_key)
+        response = ortex.get_stock_scores("NASDAQ", "AAPL")
+
+        assert isinstance(response, OrtexResponse)
+        assert isinstance(response.df, pd.DataFrame)
+        assert "quality" in response.df.columns
+        assert "total" in response.df.columns
+
+    @responses.activate
+    def test_get_stock_scores_with_from_date(self, api_key: str) -> None:
+        """Test get_stock_scores with from_date parameter."""
+        rows = [{"quality": 69.59, "date": "2025-01-01"}]
+        responses.add(
+            responses.GET,
+            "https://api.ortex.com/api/v1/stock/NASDAQ/AAPL/stock_scores",
+            json=make_paginated_response(rows),
+            status=200,
+        )
+
+        ortex.set_api_key(api_key)
+        response = ortex.get_stock_scores("NASDAQ", "AAPL", from_date="2025-01-01")
+
+        assert isinstance(response, OrtexResponse)
+        assert isinstance(response.df, pd.DataFrame)
+
+    @responses.activate
+    def test_get_stock_scores_custom(self, api_key: str) -> None:
+        """Test get_stock_scores_custom function with custom weights."""
+        rows = [
+            {
+                "quality": 50.0,
+                "value": 30.0,
+                "momentum": 70.0,
+                "growth": 60.0,
+                "total": 55.0,
+                "date": "2025-02-24",
+            }
+        ]
+        responses.add(
+            responses.POST,
+            "https://api.ortex.com/api/v1/stock/NASDAQ/AAPL/stock_scores",
+            json=make_paginated_response(rows),
+            status=200,
+        )
+
+        ortex.set_api_key(api_key)
+        weights = {"quality": 50, "growth": 50, "momentum": 65}
+        response = ortex.get_stock_scores_custom("NASDAQ", "AAPL", weights)
+
+        assert isinstance(response, OrtexResponse)
+        assert isinstance(response.df, pd.DataFrame)
+
+
+class TestStockSplitsFunctions:
+    """Tests for stock splits API functions."""
+
+    @responses.activate
+    def test_get_stock_splits(self, api_key: str) -> None:
+        """Test get_stock_splits function."""
+        rows = [
+            {"splitDate": "2024-09-24", "ratio": "1:2", "splitType": "Reverse"},
+            {"splitDate": "2024-08-23", "ratio": "2:1", "splitType": "Forward"},
+        ]
+        responses.add(
+            responses.GET,
+            "https://api.ortex.com/api/v1/stock/NASDAQ/AAPL/stock_splits",
+            json=make_paginated_response(rows),
+            status=200,
+        )
+
+        ortex.set_api_key(api_key)
+        response = ortex.get_stock_splits("NASDAQ", "AAPL")
+
+        assert isinstance(response, OrtexResponse)
+        assert isinstance(response.df, pd.DataFrame)
+        assert len(response.df) == 2
+        assert "splitType" in response.df.columns
+
+    @responses.activate
+    def test_get_stock_splits_with_from_date(self, api_key: str) -> None:
+        """Test get_stock_splits with from_date parameter."""
+        rows = [{"splitDate": "2024-09-24", "ratio": "1:2", "splitType": "Reverse"}]
+        responses.add(
+            responses.GET,
+            "https://api.ortex.com/api/v1/stock/NASDAQ/AAPL/stock_splits",
+            json=make_paginated_response(rows),
+            status=200,
+        )
+
+        ortex.set_api_key(api_key)
+        response = ortex.get_stock_splits("NASDAQ", "AAPL", from_date="2024-01-01")
+
+        assert isinstance(response, OrtexResponse)
+        assert isinstance(response.df, pd.DataFrame)
+
+
+class TestOfficialShortInterestFunctions:
+    """Tests for official short interest API functions."""
+
+    @responses.activate
+    def test_get_official_short_interest(self, api_key: str) -> None:
+        """Test get_official_short_interest function."""
+        rows = [
+            {
+                "ticker": "AAPL",
+                "shortInterest": 100000,
+                "daysToCover": 2.5,
+                "avgDailyVolume": 40000,
+                "settlementDate": "2024-01-15",
+            }
+        ]
+        responses.add(
+            responses.GET,
+            "https://api.ortex.com/api/v1/stock/official_short_interest",
+            json=make_paginated_response(rows),
+            status=200,
+        )
+
+        ortex.set_api_key(api_key)
+        response = ortex.get_official_short_interest("AAPL", "US", "2024-01-01")
+
+        assert isinstance(response, OrtexResponse)
+        assert isinstance(response.df, pd.DataFrame)
+        assert "shortInterest" in response.df.columns
+
+    @responses.activate
+    def test_get_official_short_interest_with_to_date(self, api_key: str) -> None:
+        """Test get_official_short_interest with settlement_to_date."""
+        rows = [{"ticker": "AAPL", "shortInterest": 100000}]
+        responses.add(
+            responses.GET,
+            "https://api.ortex.com/api/v1/stock/official_short_interest",
+            json=make_paginated_response(rows),
+            status=200,
+        )
+
+        ortex.set_api_key(api_key)
+        response = ortex.get_official_short_interest("AAPL", "US", "2024-01-01", "2024-06-30")
+
+        assert isinstance(response, OrtexResponse)
+        assert isinstance(response.df, pd.DataFrame)
+
+
+class TestUSGovernmentTradesFunctions:
+    """Tests for US government trades API functions."""
+
+    @responses.activate
+    def test_get_us_government_trades(self, api_key: str) -> None:
+        """Test get_us_government_trades function with no filters."""
+        rows = [
+            {
+                "company": "Apple Inc.",
+                "exchange": "Nasdaq",
+                "ticker": "AAPL",
+                "transaction_date": "2024-08-23",
+                "report_date": "2024-08-25",
+                "usd_value": "$1000-$15000",
+                "transaction_type": "Buy",
+                "filer_name": "John Doe",
+                "party": "Republican",
+                "chamber": "House",
+                "committees": ["Committee1"],
+            }
+        ]
+        responses.add(
+            responses.GET,
+            "https://api.ortex.com/api/v1/us_government_trades",
+            json=make_paginated_response(rows),
+            status=200,
+        )
+
+        ortex.set_api_key(api_key)
+        response = ortex.get_us_government_trades()
+
+        assert isinstance(response, OrtexResponse)
+        assert isinstance(response.df, pd.DataFrame)
+        assert "filer_name" in response.df.columns
+
+    @responses.activate
+    def test_get_us_government_trades_with_filters(self, api_key: str) -> None:
+        """Test get_us_government_trades with various filters."""
+        rows = [
+            {
+                "company": "Apple Inc.",
+                "ticker": "AAPL",
+                "transaction_type": "Buy",
+                "filer_name": "Jane Doe",
+                "party": "Democrat",
+                "chamber": "Senate",
+            }
+        ]
+        responses.add(
+            responses.GET,
+            "https://api.ortex.com/api/v1/us_government_trades",
+            json=make_paginated_response(rows),
+            status=200,
+        )
+
+        ortex.set_api_key(api_key)
+        response = ortex.get_us_government_trades(
+            ticker="AAPL",
+            party="democrat",
+            chamber="senate",
+            from_date="2024-01-01",
+            to_date="2024-12-31",
+        )
+
+        assert isinstance(response, OrtexResponse)
+        assert isinstance(response.df, pd.DataFrame)
+
+    @responses.activate
+    def test_get_us_government_trades_normalizes_ticker(self, api_key: str) -> None:
+        """Test that ticker is normalized to uppercase."""
+        rows = [{"ticker": "AAPL", "transaction_type": "Buy"}]
+        responses.add(
+            responses.GET,
+            "https://api.ortex.com/api/v1/us_government_trades",
+            json=make_paginated_response(rows),
+            status=200,
+        )
+
+        ortex.set_api_key(api_key)
+        response = ortex.get_us_government_trades(ticker="aapl")
+
+        assert isinstance(response, OrtexResponse)
+        assert isinstance(response.df, pd.DataFrame)
 
 
 class TestApiKeyConfiguration:
