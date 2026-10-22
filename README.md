@@ -3,7 +3,7 @@
 Official Python SDK for the ORTEX Financial Data API. Access comprehensive financial data including short interest, stock prices, options, fundamentals, stock scores, and more.
 
 [![PyPI version](https://img.shields.io/pypi/v/ortex.svg)](https://pypi.org/project/ortex/)
-[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ## Features
@@ -394,7 +394,7 @@ client = OrtexClient(
 
 ## Requirements
 
-- Python 3.9+
+- Python 3.11+
 - pandas >= 2.0.0
 - requests >= 2.31.0
 - tenacity >= 8.2.0
@@ -405,4 +405,4 @@ MIT License - ORTEX Technologies LTD
 
 ## Version
 
-1.0.5
+1.1.0
