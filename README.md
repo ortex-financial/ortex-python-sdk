@@ -405,4 +405,4 @@ MIT License - ORTEX Technologies LTD
 
 ## Version
 
-1.0.5
+1.1.0
