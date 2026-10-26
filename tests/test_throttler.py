@@ -140,6 +140,35 @@ class TestRequestThrottlerRateLimiting:
         # Allow some tolerance for execution overhead
         assert elapsed >= 0.5, f"Rate limiting not enforced, elapsed: {elapsed}"
 
+    def test_rate_limit_holds_under_concurrent_waiters(self) -> None:
+        """Concurrent waiters must each earn their own token, never share one."""
+        rate = 20.0
+        burst = 10
+        workers = 30
+        throttler = RequestThrottler(max_concurrent=burst, requests_per_second=rate)
+        stamps: list[float] = []
+        lock = threading.Lock()
+
+        def worker() -> None:
+            with throttler.acquire():
+                with lock:
+                    stamps.append(time.monotonic())
+
+        start = time.monotonic()
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            for _ in range(workers):
+                executor.submit(worker)
+
+        elapsed = time.monotonic() - start
+        # The burst passes at once; the remaining 20 need 20 / rate = 1.0s.
+        assert elapsed >= 0.9, f"Rate limit oversubscribed, elapsed: {elapsed:.2f}s"
+
+        # No sliding one-second window may hold more than burst + rate requests.
+        stamps.sort()
+        for i, t0 in enumerate(stamps):
+            in_window = sum(1 for t in stamps[i:] if t - t0 <= 1.0)
+            assert in_window <= burst + rate + 1, f"{in_window} requests within 1s"
+
     def test_no_rate_limiting_when_disabled(self) -> None:
         """Test that requests are fast when rate limiting is disabled."""
         throttler = RequestThrottler(max_concurrent=10, requests_per_second=None)

@@ -9,10 +9,12 @@ import pytest
 import responses
 from responses import matchers
 
-from ortex import OrtexClient
+from ortex import OrtexClient, __version__
 from ortex.client import normalize_date, normalize_exchange, normalize_ticker, to_dataframe
 from ortex.exceptions import (
+    APIError,
     AuthenticationError,
+    NetworkError,
     NotFoundError,
     RateLimitError,
     ServerError,
@@ -47,6 +49,11 @@ class TestOrtexClientInit:
         assert client._session.headers["Content-Type"] == "application/json"
         assert client._session.headers["Accept"] == "application/json"
 
+    def test_user_agent_matches_package_version(self, api_key: str) -> None:
+        """The User-Agent must track __version__ rather than a hardcoded string."""
+        client = OrtexClient(api_key=api_key)
+        assert client._session.headers["User-Agent"] == f"ortex-python-sdk/{__version__}"
+
     def test_init_custom_timeout(self, api_key: str) -> None:
         """Test client initialization with custom timeout."""
         client = OrtexClient(api_key=api_key, timeout=60)
@@ -56,6 +63,16 @@ class TestOrtexClientInit:
         """Test client initialization with custom max retries."""
         client = OrtexClient(api_key=api_key, max_retries=10)
         assert client.max_retries == 10
+
+    def test_rate_limit_defaults_to_three_per_second(self, api_key: str) -> None:
+        """Omitting requests_per_second keeps the 3.0 default."""
+        client = OrtexClient(api_key=api_key)
+        assert client.throttler.requests_per_second == 3.0
+
+    def test_rate_limit_none_disables_it(self, api_key: str) -> None:
+        """Passing requests_per_second=None must disable rate limiting, not restore 3.0."""
+        client = OrtexClient(api_key=api_key, requests_per_second=None)
+        assert client.throttler.requests_per_second is None
 
 
 class TestOrtexClientGet:
@@ -165,6 +182,99 @@ class TestOrtexClientGet:
         client = OrtexClient(api_key=api_key, max_retries=1)
         with pytest.raises(ServerError):
             client.get("test/endpoint")
+
+
+class TestOrtexClientErrorBodies:
+    """Tests for error-body shapes the message extraction must handle."""
+
+    @responses.activate
+    def test_nested_error_object_gives_string_message(self, api_key: str) -> None:
+        """A {"error": {"code", "message"}} body yields a readable string, not a dict."""
+        responses.add(
+            responses.GET,
+            "https://api.ortex.com/api/v1/test/endpoint",
+            json={
+                "error": {
+                    "status": 402,
+                    "code": "creditsExhausted",
+                    "message": "Out of credits",
+                }
+            },
+            status=402,
+        )
+
+        client = OrtexClient(api_key=api_key, max_retries=1)
+        with pytest.raises(APIError) as exc_info:
+            client.get("test/endpoint")
+        assert isinstance(exc_info.value.message, str)
+        assert exc_info.value.message == "creditsExhausted: Out of credits"
+        assert exc_info.value.status_code == 402
+
+    @responses.activate
+    def test_list_error_body_does_not_crash(self, api_key: str) -> None:
+        """A JSON list body must map to the status exception, not AttributeError."""
+        responses.add(
+            responses.GET,
+            "https://api.ortex.com/api/v1/test/endpoint",
+            json=[{"field": "from_date", "problem": "required"}],
+            status=400,
+        )
+
+        client = OrtexClient(api_key=api_key, max_retries=1)
+        with pytest.raises(ValidationError) as exc_info:
+            client.get("test/endpoint")
+        assert isinstance(exc_info.value.message, str)
+        assert "from_date" in exc_info.value.message
+
+    @responses.activate
+    def test_non_json_error_body_uses_text(self, api_key: str) -> None:
+        """A non-JSON error body falls back to its text."""
+        responses.add(
+            responses.GET,
+            "https://api.ortex.com/api/v1/test/endpoint",
+            body="<html><body>Bad Gateway</body></html>",
+            status=502,
+            content_type="text/html",
+        )
+
+        client = OrtexClient(api_key=api_key, max_retries=1)
+        with pytest.raises(ServerError) as exc_info:
+            client.get("test/endpoint")
+        assert "Bad Gateway" in exc_info.value.message
+
+    @responses.activate
+    def test_empty_error_body_reports_status(self, api_key: str) -> None:
+        """An empty error body still produces a message."""
+        responses.add(
+            responses.GET,
+            "https://api.ortex.com/api/v1/test/endpoint",
+            body="",
+            status=404,
+        )
+
+        client = OrtexClient(api_key=api_key, max_retries=1)
+        with pytest.raises(NotFoundError) as exc_info:
+            client.get("test/endpoint")
+        assert exc_info.value.message == "HTTP 404"
+
+    @responses.activate
+    def test_non_json_200_raises_api_error_not_network_error(self, api_key: str) -> None:
+        """A 200 with a non-JSON body is an API error, not a connectivity failure."""
+        responses.add(
+            responses.GET,
+            "https://api.ortex.com/api/v1/test/endpoint",
+            body="<html>proxy page</html>",
+            status=200,
+            content_type="text/html",
+        )
+
+        client = OrtexClient(api_key=api_key, max_retries=1)
+        with pytest.raises(APIError) as exc_info:
+            client.get("test/endpoint")
+        assert not isinstance(exc_info.value, NetworkError)
+        assert exc_info.value.status_code == 200
+        assert "text/html" in exc_info.value.message
+        assert "proxy page" in exc_info.value.message
 
 
 class TestOrtexClientPost:
