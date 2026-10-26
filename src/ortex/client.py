@@ -21,6 +21,7 @@ from tenacity import (
     wait_exponential,
 )
 
+from ._version import __version__
 from .exceptions import (
     APIError,
     AuthenticationError,
@@ -72,7 +73,7 @@ class OrtexClient:
         timeout: int = DEFAULT_TIMEOUT,
         max_retries: int = MAX_RETRIES,
         max_concurrent_requests: int | None = None,
-        requests_per_second: float | None = None,
+        requests_per_second: float | None = DEFAULT_REQUESTS_PER_SECOND,
     ) -> None:
         """Initialize the ORTEX API client.
 
@@ -83,11 +84,13 @@ class OrtexClient:
             max_retries: Maximum number of retry attempts for rate-limited
                 or timed-out requests. Defaults to 5.
             max_concurrent_requests: Maximum number of concurrent requests
-                allowed. Defaults to 10. Set to 0 to disable throttling.
-                This is useful when using the client from multiple threads.
+                allowed. Defaults to 2. Set to 0 to disable the concurrency
+                limit. This is useful when using the client from multiple
+                threads.
             requests_per_second: Maximum requests per second (rate limit).
-                Defaults to None (no rate limit). When set, requests are
-                spaced to maintain this rate across all threads.
+                Defaults to 3.0. Pass None to disable rate limiting. When
+                set, requests are spaced to maintain this rate across all
+                threads.
 
         Raises:
             AuthenticationError: If no API key is provided or found in environment.
@@ -125,14 +128,9 @@ class OrtexClient:
             if max_concurrent_requests is not None
             else self.DEFAULT_MAX_CONCURRENT
         )
-        effective_requests_per_second = (
-            requests_per_second
-            if requests_per_second is not None
-            else self.DEFAULT_REQUESTS_PER_SECOND
-        )
         self._throttler = RequestThrottler(
             max_concurrent=effective_max_concurrent,
-            requests_per_second=effective_requests_per_second,
+            requests_per_second=requests_per_second,
         )
 
         self._session = requests.Session()
@@ -141,7 +139,7 @@ class OrtexClient:
                 "Ortex-Api-Key": self.api_key,
                 "Content-Type": "application/json",
                 "Accept": "application/json",
-                "User-Agent": "ortex-python-sdk/1.0.4",
+                "User-Agent": f"ortex-python-sdk/{__version__}",
             }
         )
 
@@ -175,17 +173,19 @@ class OrtexClient:
             ServerError: If server error occurs (5xx).
             OrtexError: For other HTTP errors.
         """
-        if response.status_code == 200:
-            return response.json()
-
-        # Extract error message from response if available
-        try:
-            error_data = response.json()
-            message = error_data.get("message", error_data.get("error", response.text))
-        except (ValueError, KeyError):
-            message = response.text or f"HTTP {response.status_code}"
-
         status = response.status_code
+        if status == 200:
+            try:
+                return response.json()
+            except ValueError as e:
+                content_type = response.headers.get("Content-Type", "unknown")
+                raise APIError(
+                    f"Expected a JSON response but received {content_type}: "
+                    f"{_excerpt(response.text)}",
+                    status_code=status,
+                ) from e
+
+        message = _error_message(response)
         if status == 401:
             raise AuthenticationError(message)
         elif status == 429:
@@ -420,6 +420,42 @@ class OrtexClient:
     def __exit__(self, *args: Any) -> None:
         """Exit context manager and close session."""
         self.close()
+
+
+def _excerpt(text: str, limit: int = 200) -> str:
+    """Return a trimmed, single-line excerpt of a response body."""
+    text = " ".join(text.split())
+    if len(text) > limit:
+        return text[:limit] + "..."
+    return text
+
+
+def _error_message(response: requests.Response) -> str:
+    """Extract a human-readable message from an error response body.
+
+    Handles the v1 shape ({"message": ...} or {"error": "..."}), the v11
+    envelope ({"error": {"code": ..., "message": ...}}), non-object JSON
+    bodies and non-JSON bodies, always returning a string.
+    """
+    try:
+        payload = response.json()
+    except ValueError:
+        payload = None
+
+    if isinstance(payload, dict):
+        error = payload.get("error")
+        if isinstance(error, dict):
+            message = error.get("message")
+            code = error.get("code")
+            if isinstance(message, str) and message:
+                return f"{code}: {message}" if isinstance(code, str) and code else message
+        for key in ("message", "detail", "error"):
+            value = payload.get(key)
+            if isinstance(value, str) and value:
+                return value
+
+    text = _excerpt(response.text)
+    return text or f"HTTP {response.status_code}"
 
 
 def normalize_exchange(exchange: str) -> str:
