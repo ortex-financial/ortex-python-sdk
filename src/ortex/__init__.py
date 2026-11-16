@@ -16,7 +16,8 @@ Full documentation: https://docs.ortex.com
 
 from __future__ import annotations
 
-__version__ = "1.1.0"
+from ._version import __version__
+
 __author__ = "ORTEX Technologies LTD"
 
 from .api import (

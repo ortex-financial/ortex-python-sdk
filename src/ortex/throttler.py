@@ -95,29 +95,24 @@ class RequestThrottler:
         self._tokens = min(self._max_tokens, self._tokens + new_tokens)
 
     def _wait_for_token(self) -> None:
-        """Wait until a token is available for rate limiting."""
+        """Reserve a token under the lock, then sleep until it is earned.
+
+        The token is consumed while the lock is held, so the bucket may go
+        negative: each waiting request owns its own slot in the queue and
+        sleeps for exactly the time its slot takes to refill. Checking and
+        consuming in one critical section is what prevents several threads
+        from waking together and all passing on the same token.
+        """
         if self._requests_per_second is None:
             return
 
         with self._rate_lock:
             self._refill_tokens()
+            self._tokens -= 1.0
+            deficit = -self._tokens
 
-            if self._tokens >= 1.0:
-                self._tokens -= 1.0
-                return
-
-            # Calculate wait time for next token
-            tokens_needed = 1.0 - self._tokens
-            wait_time = tokens_needed / self._requests_per_second
-
-        # Wait outside the lock
-        if wait_time > 0:
-            time.sleep(wait_time)
-
-        # Consume the token after waiting
-        with self._rate_lock:
-            self._refill_tokens()
-            self._tokens = max(0, self._tokens - 1.0)
+        if deficit > 0:
+            time.sleep(deficit / self._requests_per_second)
 
     @contextmanager
     def acquire(self, timeout: float | None = None) -> Generator[None, None, None]:
